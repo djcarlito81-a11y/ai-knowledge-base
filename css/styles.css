@@ -1,0 +1,297 @@
+/* ============================================================
+   AI 知识库与工作台 — 自定义样式
+   ============================================================ */
+
+/* ----- CSS Variables (Light/Dark Theme) ----- */
+:root {
+  --scrollbar-thumb: #334155;
+  --scrollbar-track: transparent;
+}
+
+.light {
+  --scrollbar-thumb: #94a3b8;
+  --scrollbar-track: #f1f5f9;
+}
+
+/* ----- Scrollbar ----- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb);
+  filter: brightness(1.2);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* ----- Selection ----- */
+::selection {
+  background: rgba(99, 102, 241, 0.3);
+  color: #e2e8f0;
+}
+
+/* ----- Focus Ring Override for better visibility ----- */
+input:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+select:focus-visible {
+  outline: none;
+}
+
+/* ----- Light Theme Overrides ----- */
+.light body {
+  background-color: #f9fafb;
+  color: #111827;
+}
+.light .bg-surface-950 { background-color: #f8fafc; }
+.light .bg-surface-900\/80 { background-color: rgba(255,255,255,0.85); }
+.light .bg-surface-900\/50 { background-color: rgba(248,250,252,0.5); }
+.light .bg-surface-900\/95 { background-color: rgba(255,255,255,0.95); }
+.light .bg-surface-800 { background-color: #ffffff; }
+.light .bg-surface-800\/50 { background-color: rgba(241,245,249,1); }
+.light .bg-surface-700 { background-color: #f1f5f9; }
+.light .bg-surface-750 { background-color: #e2e8f0; }
+.light .bg-surface-600 { background-color: #e2e8f0; }
+.light .border-surface-800 { border-color: #e2e8f0; }
+.light .border-surface-700 { border-color: #cbd5e1; }
+.light .text-gray-100 { color: #0f172a; }
+.light .text-gray-200 { color: #1e293b; }
+.light .text-gray-300 { color: #334155; }
+.light .text-gray-400 { color: #475569; }
+.light .text-gray-500 { color: #64748b; }
+.light .placeholder-gray-500::placeholder { color: #94a3b8; }
+.light .hover\:bg-surface-800:hover { background-color: #f1f5f9; }
+.light .hover\:bg-surface-600:hover { background-color: #cbd5e1; }
+.light .hover\:text-gray-200:hover { color: #1e293b; }
+.light .hover\:bg-surface-700:hover { background-color: #e2e8f0; }
+
+/* ----- Toast Animation ----- */
+.toast-enter {
+  animation: toastIn 0.35s cubic-bezier(0.21, 1.02, 0.73, 1) forwards;
+}
+.toast-exit {
+  animation: toastOut 0.25s ease-in forwards;
+}
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(100%) scale(0.95); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+@keyframes toastOut {
+  from { opacity: 1; transform: translateX(0) scale(1); }
+  to   { opacity: 0; transform: translateX(100%) scale(0.95); }
+}
+
+/* ----- Chat Message Animations ----- */
+.chat-msg-enter {
+  animation: chatMsgIn 0.3s ease-out forwards;
+}
+@keyframes chatMsgIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ----- Thinking Dots ----- */
+.thinking-dots span {
+  animation: pulseDot 1.4s infinite ease-in-out;
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #94a3b8;
+  margin: 0 1px;
+}
+.thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+/* ----- Priority Badge Glow ----- */
+.priority-high   { box-shadow: 0 0 10px rgba(239,68,68,0.15); }
+.priority-medium { box-shadow: 0 0 10px rgba(250,204,21,0.1); }
+.priority-low    { box-shadow: 0 0 10px rgba(34,197,94,0.1); }
+
+/* ----- Tag Chip ----- */
+.tag-chip {
+  transition: all 0.15s ease;
+}
+.tag-chip:hover .tag-remove {
+  opacity: 1;
+}
+.tag-remove {
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+/* ----- Nav Item Active Indicator ----- */
+.nav-item {
+  position: relative;
+  transition: all 0.15s ease;
+}
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(to bottom, #6366f1, #8b5cf6);
+}
+
+/* ----- Checkbox Custom Style ----- */
+.custom-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #475569;
+  border-radius: 6px;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+.custom-checkbox:checked {
+  background: #6366f1;
+  border-color: #6366f1;
+}
+.custom-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 5px;
+  height: 9px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.custom-checkbox:hover {
+  border-color: #818cf8;
+}
+
+/* ----- Card Hover ----- */
+.card-hover {
+  transition: all 0.2s ease;
+}
+.card-hover:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+}
+
+/* ----- Empty State ----- */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  text-align: center;
+  padding: 2rem;
+}
+
+/* ----- Chat Markdown-like styles ----- */
+.chat-content p { margin-bottom: 0.5rem; }
+.chat-content p:last-child { margin-bottom: 0; }
+.chat-content code {
+  background: rgba(99,102,241,0.15);
+  color: #c4b5fd;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.875em;
+}
+.chat-content pre {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 12px 16px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+.chat-content pre code {
+  background: none;
+  padding: 0;
+  color: #e2e8f0;
+}
+.chat-content ul, .chat-content ol {
+  padding-left: 1.5rem;
+  margin: 4px 0;
+}
+.chat-content li { margin-bottom: 2px; }
+.chat-content strong { color: #e2e8f0; font-weight: 600; }
+.chat-content a {
+  color: #818cf8;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ----- API Key Input Mask ----- */
+input[type="password"].api-key {
+  letter-spacing: 2px;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+}
+
+/* ----- Responsive tweaks ----- */
+@media (max-width: 767px) {
+  .view-padding-mobile {
+    padding: 1rem !important;
+  }
+}
+
+/* ----- View Transitions ----- */
+.view-enter {
+  animation: viewFadeIn 0.25s ease-out forwards;
+}
+@keyframes viewFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ----- Skeleton Loading ----- */
+.skeleton {
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 8px;
+}
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ----- PIN Lock Keypad ----- */
+#pin-keypad button {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+#pin-keypad button:active {
+  transform: scale(0.92);
+  transition: transform 0.1s ease;
+}
+.pin-dot-filled {
+  background-color: #818cf8 !important;
+  box-shadow: 0 0 8px rgba(129,140,248,0.4);
+}
+.pin-dot-error {
+  background-color: #f87171 !important;
+  animation: pinShake 0.4s ease;
+}
+@keyframes pinShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
