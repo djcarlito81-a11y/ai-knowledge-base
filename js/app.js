@@ -1219,6 +1219,32 @@ const SettingsModule = {
           <p class="text-xs text-gray-600 mt-3">PIN 码使用 SHA-256 哈希存储，仅用于页面访问保护。忘记 PIN 码可在浏览器控制台执行 <code class="text-indigo-400">localStorage.removeItem("ai_kb_settings")</code> 后刷新页面。</p>
         </div>
 
+        <!-- Sync -->
+        <div class="bg-surface-800 border border-surface-700 rounded-2xl p-5 mb-6">
+          <h2 class="text-lg font-semibold mb-1">🔄 多端同步</h2>
+          <p class="text-sm text-gray-500 mb-4">通过 GitHub Gist 自动同步数据，电脑和手机数据保持一致</p>
+          ${settings.syncEnabled ? `
+            <div class="flex items-center gap-3 mb-4">
+              <span class="text-sm" id="sync-status-text">${SyncModule.statusText()}</span>
+              <button id="sync-pull-btn" class="text-xs px-3 py-1.5 rounded-lg bg-surface-700 hover:bg-surface-600 text-gray-300 transition-colors">立即同步</button>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+              <button id="sync-disable-btn" class="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-sm rounded-xl transition-colors border border-red-500/20">关闭同步</button>
+            </div>
+          ` : `
+            <div class="flex items-center gap-3 mb-4">
+              <span class="text-sm text-gray-500">○ 未开启同步</span>
+            </div>
+            <p class="text-xs text-gray-500 mb-3">1. 打开 <a href="https://github.com/settings/tokens" target="_blank" class="text-indigo-400 underline">github.com/settings/tokens</a> → Generate new token (classic) → 勾选 <strong>gist</strong> 权限 → 生成后粘贴到下方</p>
+            <div class="flex gap-2 max-w-md mb-3">
+              <input type="password" id="sync-token-input" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                class="flex-1 bg-surface-900/50 border border-surface-700 rounded-xl px-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-all">
+              <button id="sync-enable-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl transition-all active:scale-95 whitespace-nowrap">开启同步</button>
+            </div>
+          `}
+          <p class="text-xs text-gray-600 mt-3">同步基于私有 GitHub Gist，数据仅你和授权的 Token 可访问。自动同步在数据变更后触发。</p>
+        </div>
+
         <!-- Data Management -->
         <div class="bg-surface-800 border border-surface-700 rounded-2xl p-5 mb-6">
           <h2 class="text-lg font-semibold mb-1">💾 数据管理</h2>
@@ -1339,6 +1365,35 @@ const SettingsModule = {
         UI.toast('PIN 锁已关闭', 'info');
         this.render();
       }
+    });
+
+    // Sync: Enable
+    view.querySelector('#sync-enable-btn')?.addEventListener('click', async () => {
+      const token = view.querySelector('#sync-token-input').value;
+      const ok = await SyncModule.enable(token);
+      if (ok) {
+        UI.toast('同步已开启，数据已合并', 'success');
+        this.render();
+      } else {
+        UI.toast('GitHub Token 格式不正确', 'warning');
+      }
+    });
+
+    // Sync: Disable
+    view.querySelector('#sync-disable-btn')?.addEventListener('click', () => {
+      SyncModule.disable();
+      UI.toast('同步已关闭', 'info');
+      this.render();
+    });
+
+    // Sync: Manual pull
+    view.querySelector('#sync-pull-btn')?.addEventListener('click', async () => {
+      await SyncModule.pull();
+      this.render();
+      UI.renderNav();
+      TodoModule.render();
+      InboxModule.render();
+      ChatModule.render();
     });
 
     // Export
@@ -1560,6 +1615,203 @@ const LockScreen = {
 };
 
 // ============================================================
+// Data Sync — GitHub Gist
+// ============================================================
+const SyncModule = {
+  _gistId: null,       // cached gist ID
+  _pushTimer: null,    // debounce timer
+  _pulling: false,
+  _pushing: false,
+  _status: 'idle',     // idle | syncing | error | ok
+
+  // --- Get config from settings ---
+  _config() {
+    const s = Storage.getSettings();
+    return {
+      enabled: !!s.syncEnabled,
+      token: s.syncToken || '',
+      gistId: s.syncGistId || ''
+    };
+  },
+
+  // --- Save config ---
+  _saveConfig(updates) {
+    const s = Storage.getSettings();
+    Object.assign(s, updates);
+    Storage._rawSet('settings', s);
+  },
+
+  // --- Status badge ---
+  statusText() {
+    const map = { idle: '⚪ 待同步', syncing: '🔄 同步中...', ok: '🟢 已同步', error: '🔴 同步失败' };
+    return map[this._status] || map.idle;
+  },
+
+  // --- Build data payload ---
+  _buildPayload() {
+    return {
+      todos: Storage.getTodos(),
+      inbox: Storage.getInbox(),
+      chatHistory: Storage.getChatHistory(),
+      updatedAt: new Date().toISOString()
+    };
+  },
+
+  // --- Find or create the sync Gist ---
+  async _getOrCreateGist() {
+    const cfg = this._config();
+    if (cfg.gistId) return cfg.gistId;
+
+    // Create new private gist
+    const resp = await fetch('https://api.github.com/gists', {
+      method: 'POST',
+      headers: { 'Authorization': `token ${cfg.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        description: 'AI Knowledge Base Sync Data',
+        public: false,
+        files: { 'ai-kb-data.json': { content: JSON.stringify(this._buildPayload()) } }
+      })
+    });
+    if (!resp.ok) throw new Error('创建 Gist 失败: ' + (await resp.json().catch(()=>({})).message || resp.status));
+    const data = await resp.json();
+    this._saveConfig({ syncGistId: data.id });
+    return data.id;
+  },
+
+  // --- Pull data from Gist ---
+  async pull() {
+    const cfg = this._config();
+    if (!cfg.enabled || !cfg.token) return;
+    this._pulling = true;
+    this._status = 'syncing';
+    try {
+      const gistId = cfg.gistId;
+      if (!gistId) { this._pulling = false; this._status = 'idle'; return; }
+
+      const resp = await fetch(`https://api.github.com/gists/${gistId}`, {
+        headers: { 'Authorization': `token ${cfg.token}`, 'Accept': 'application/vnd.github.v3+json' }
+      });
+      if (!resp.ok) {
+        if (resp.status === 404) { this._saveConfig({ syncGistId: '' }); }
+        throw new Error('Gist 读取失败');
+      }
+      const data = await resp.json();
+      const file = data.files['ai-kb-data.json'];
+      if (!file || !file.content) { this._pulling = false; this._status = 'ok'; return; }
+
+      const remote = JSON.parse(file.content);
+      // Merge: remote wins for data, but keep local settings keys
+      if (remote.todos) {
+        const local = Storage.getTodos();
+        const merged = this._mergeArrays(local, remote.todos);
+        Storage._rawSet('todos', merged);
+      }
+      if (remote.inbox) {
+        const local = Storage.getInbox();
+        const merged = this._mergeArrays(local, remote.inbox);
+        Storage._rawSet('inbox', merged);
+      }
+      if (remote.chatHistory && remote.chatHistory.length > (Storage.getChatHistory() || []).length) {
+        Storage._rawSet('chat_history', remote.chatHistory);
+      }
+      this._status = 'ok';
+      UI.toast('数据已同步', 'success');
+    } catch (e) {
+      console.error('Sync pull error:', e);
+      this._status = 'error';
+      // Don't toast on every pull failure — it's too noisy
+    }
+    this._pulling = false;
+  },
+
+  // --- Push data to Gist ---
+  async push() {
+    const cfg = this._config();
+    if (!cfg.enabled || !cfg.token || this._pushing) return;
+    this._pushing = true;
+    this._status = 'syncing';
+    try {
+      const gistId = await this._getOrCreateGist();
+      await fetch(`https://api.github.com/gists/${gistId}`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `token ${cfg.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          files: { 'ai-kb-data.json': { content: JSON.stringify(this._buildPayload()) } }
+        })
+      });
+      this._status = 'ok';
+    } catch (e) {
+      console.error('Sync push error:', e);
+      this._status = 'error';
+    }
+    this._pushing = false;
+  },
+
+  // --- Debounced push (called on data changes) ---
+  schedulePush() {
+    const cfg = this._config();
+    if (!cfg.enabled) return;
+    clearTimeout(this._pushTimer);
+    this._pushTimer = setTimeout(() => this.push(), 2000);
+  },
+
+  // --- Merge two arrays by id, keep newest version of each item ---
+  _mergeArrays(local, remote) {
+    const map = new Map();
+    for (const item of local) map.set(item.id, item);
+    for (const item of remote) {
+      const existing = map.get(item.id);
+      if (!existing || (item.createdAt && existing.createdAt && item.createdAt >= existing.createdAt)) {
+        map.set(item.id, item);
+      }
+    }
+    return [...map.values()].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  },
+
+  // --- Toggle sync on/off ---
+  async enable(token) {
+    if (!token || token.length < 10) return false;
+    this._saveConfig({ syncEnabled: true, syncToken: token.trim() });
+    await this.pull(); // Pull immediately
+    this.push();       // Then push local changes
+    return true;
+  },
+
+  disable() {
+    clearTimeout(this._pushTimer);
+    this._saveConfig({ syncEnabled: false });
+    this._status = 'idle';
+  },
+
+  // --- Init: pull on app start ---
+  async init() {
+    const cfg = this._config();
+    if (!cfg.enabled || !cfg.token) return;
+    await this.pull();
+  }
+};
+
+// Hook Storage to auto-trigger sync on writes
+(function _patchStorage() {
+  const origSet = Storage.set.bind(Storage);
+  Storage.set = function (key, value) {
+    const result = origSet(key, value);
+    if (['todos', 'inbox', 'chat_history'].includes(key)) {
+      SyncModule.schedulePush();
+    }
+    return result;
+  };
+
+  // Raw set that doesn't trigger sync (for internal use)
+  Storage._rawSet = function (key, value) {
+    try {
+      localStorage.setItem(this._prefix + key, JSON.stringify(value));
+      return true;
+    } catch (e) { return false; }
+  };
+})();
+
+// ============================================================
 // Keyboard Shortcuts
 // ============================================================
 const Shortcuts = {
@@ -1595,6 +1847,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Init keyboard shortcuts
   Shortcuts.init();
+
+  // Init sync (pull remote data before rendering)
+  await SyncModule.init();
 
   // Render navigation and default view
   UI.renderNav();
