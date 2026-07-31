@@ -1373,6 +1373,11 @@ const SettingsModule = {
       const ok = await SyncModule.enable(token);
       if (ok) {
         UI.toast('同步已开启，数据已合并', 'success');
+        // Refresh all views with new data
+        UI.renderNav();
+        TodoModule.render();
+        InboxModule.render();
+        ChatModule.render();
         this.render();
       } else {
         UI.toast('GitHub Token 格式不正确', 'warning');
@@ -1649,10 +1654,13 @@ const SyncModule = {
 
   // --- Build data payload ---
   _buildPayload() {
+    const s = Storage.getSettings();
     return {
       todos: Storage.getTodos(),
       inbox: Storage.getInbox(),
       chatHistory: Storage.getChatHistory(),
+      lockPinHash: s.lockPinHash || null,
+      preferredModel: s.preferredModel || 'deepseek',
       updatedAt: new Date().toISOString()
     };
   },
@@ -1661,6 +1669,19 @@ const SyncModule = {
   async _getOrCreateGist() {
     const cfg = this._config();
     if (cfg.gistId) return cfg.gistId;
+
+    // Search for existing sync gist (so new devices reuse the same one)
+    const listResp = await fetch('https://api.github.com/gists?per_page=100', {
+      headers: { 'Authorization': `token ${cfg.token}`, 'Accept': 'application/vnd.github.v3+json' }
+    });
+    if (listResp.ok) {
+      const gists = await listResp.json();
+      const existing = gists.find(g => g.description === 'AI Knowledge Base Sync Data');
+      if (existing) {
+        this._saveConfig({ syncGistId: existing.id });
+        return existing.id;
+      }
+    }
 
     // Create new private gist
     const resp = await fetch('https://api.github.com/gists', {
@@ -1713,6 +1734,16 @@ const SyncModule = {
       }
       if (remote.chatHistory && remote.chatHistory.length > (Storage.getChatHistory() || []).length) {
         Storage._rawSet('chat_history', remote.chatHistory);
+      }
+      // Merge sync-safe settings: PIN lock & model preference (not API keys)
+      const localSettings = Storage.getSettings();
+      if (remote.lockPinHash) {
+        localSettings.lockPinHash = remote.lockPinHash;
+        Storage._rawSet('settings', localSettings);
+      }
+      if (remote.preferredModel && !localSettings.preferredModel) {
+        localSettings.preferredModel = remote.preferredModel;
+        Storage._rawSet('settings', localSettings);
       }
       this._status = 'ok';
       UI.toast('数据已同步', 'success');
