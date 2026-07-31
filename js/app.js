@@ -1242,6 +1242,15 @@ const SettingsModule = {
               <button id="sync-enable-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl transition-all active:scale-95 whitespace-nowrap">开启同步</button>
             </div>
           `}
+          ${settings.syncEnabled ? `
+            <label class="flex items-center gap-3 mt-4 p-3 rounded-xl bg-surface-900/50 cursor-pointer">
+              <input type="checkbox" id="sync-keys-toggle" class="w-4 h-4 rounded accent-indigo-500" ${settings.syncKeysEnabled ? 'checked' : ''}>
+              <div>
+                <span class="text-sm text-amber-400">🔑 同时同步 API Key</span>
+                <span class="text-xs text-gray-500 block mt-0.5">开启后电脑上填的 Key 会自动同步到手机。Key 存于私有 Gist，建议 Token 不泄露。</span>
+              </div>
+            </label>
+          ` : ''}
           <p class="text-xs text-gray-600 mt-3">同步基于私有 GitHub Gist，数据仅你和授权的 Token 可访问。自动同步在数据变更后触发。</p>
         </div>
 
@@ -1365,6 +1374,15 @@ const SettingsModule = {
         UI.toast('PIN 锁已关闭', 'info');
         this.render();
       }
+    });
+
+    // Sync: Toggle API key sync
+    view.querySelector('#sync-keys-toggle')?.addEventListener('change', (e) => {
+      const s = Storage.getSettings();
+      s.syncKeysEnabled = e.target.checked;
+      Storage._rawSet('settings', s);
+      SyncModule.schedulePush(); // Trigger push with (or without) keys
+      UI.toast(e.target.checked ? 'API Key 将随同步传输' : 'API Key 已从同步中排除', 'info');
     });
 
     // Sync: Enable
@@ -1655,7 +1673,7 @@ const SyncModule = {
   // --- Build data payload ---
   _buildPayload() {
     const s = Storage.getSettings();
-    return {
+    const payload = {
       todos: Storage.getTodos(),
       inbox: Storage.getInbox(),
       chatHistory: Storage.getChatHistory(),
@@ -1663,6 +1681,13 @@ const SyncModule = {
       preferredModel: s.preferredModel || 'deepseek',
       updatedAt: new Date().toISOString()
     };
+    // Include API keys only if user opted in
+    if (s.syncKeysEnabled) {
+      payload.openaiKey = s.openaiKey || '';
+      payload.claudeKey = s.claudeKey || '';
+      payload.deepseekKey = s.deepseekKey || '';
+    }
+    return payload;
   },
 
   // --- Find or create the sync Gist ---
@@ -1735,16 +1760,19 @@ const SyncModule = {
       if (remote.chatHistory && remote.chatHistory.length > (Storage.getChatHistory() || []).length) {
         Storage._rawSet('chat_history', remote.chatHistory);
       }
-      // Merge sync-safe settings: PIN lock & model preference (not API keys)
+      // Merge sync-safe settings: PIN lock, model preference, and optionally API keys
       const localSettings = Storage.getSettings();
-      if (remote.lockPinHash) {
+      if (remote.lockPinHash && !localSettings.lockPinHash) {
         localSettings.lockPinHash = remote.lockPinHash;
-        Storage._rawSet('settings', localSettings);
       }
-      if (remote.preferredModel && !localSettings.preferredModel) {
+      if (remote.preferredModel) {
         localSettings.preferredModel = remote.preferredModel;
-        Storage._rawSet('settings', localSettings);
       }
+      // Restore API keys from sync (if user opted in)
+      if (remote.deepseekKey && !localSettings.deepseekKey) localSettings.deepseekKey = remote.deepseekKey;
+      if (remote.openaiKey && !localSettings.openaiKey) localSettings.openaiKey = remote.openaiKey;
+      if (remote.claudeKey && !localSettings.claudeKey) localSettings.claudeKey = remote.claudeKey;
+      Storage._rawSet('settings', localSettings);
       this._status = 'ok';
       UI.toast('数据已同步', 'success');
     } catch (e) {
